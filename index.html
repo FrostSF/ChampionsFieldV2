@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Champions Field</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;700;900&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --red: #ff3a3a;
+  --blue: #3a9fff;
+  --gold: #ffd700;
+  --purple: #b44fff;
+  --bg: #06060e;
+  --surface: #0e0e1e;
+  --surface2: #161628;
+  --border: rgba(255,255,255,0.08);
+  --text: #e8e8f0;
+  --muted: #666688;
+}
+
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Exo 2', sans-serif; }
+
+/* ── SCREENS ───────────────────────────────────────────────────── */
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity .35s, transform .35s; }
+.screen.hidden { opacity: 0; pointer-events: none; transform: scale(.97); }
+
+/* ── STARS BG ──────────────────────────────────────────────────── */
+#starfield { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+
+/* ── TITLE SCREEN ──────────────────────────────────────────────── */
+#screen-title { z-index: 1; gap: 0; }
+.title-logo { font-family: 'Rajdhani', sans-serif; font-size: clamp(48px,9vw,96px); font-weight: 700; letter-spacing: 4px; text-transform: uppercase;
+  background: linear-gradient(135deg, #fff 0%, var(--blue) 45%, var(--purple) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 0 30px rgba(58,159,255,0.4)); margin-bottom: 8px; }
+.title-sub { font-size: 13px; letter-spacing: 8px; color: var(--muted); text-transform: uppercase; margin-bottom: 48px; }
+
+.profile-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 36px; width: 380px; display: flex; flex-direction: column; gap: 16px; }
+.profile-card h3 { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+
+.avatar-row { display: flex; align-items: center; gap: 16px; }
+.avatar-preview { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 28px; cursor: pointer; overflow: hidden; position: relative; flex-shrink: 0; }
+.avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-preview:hover::after { content: '📷'; position: absolute; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+#avatar-upload { display: none; }
+
+.inp { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 14px; outline: none; transition: border-color .2s; }
+.inp:focus { border-color: var(--blue); }
+.inp::placeholder { color: var(--muted); }
+
+select.inp { cursor: pointer; }
+option { background: var(--surface2); }
+
+.banner-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.banner-swatch { width: 32px; height: 32px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform .15s, border-color .15s; }
+.banner-swatch.active, .banner-swatch:hover { border-color: #fff; transform: scale(1.1); }
+
+.btn { padding: 12px 28px; border-radius: 10px; border: none; font-family: 'Rajdhani', sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all .2s; }
+.btn-primary { background: linear-gradient(135deg, var(--blue), var(--purple)); color: #fff; box-shadow: 0 4px 20px rgba(58,159,255,0.3); }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 28px rgba(58,159,255,0.5); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface); border-color: var(--blue); }
+.btn-red { background: linear-gradient(135deg, #c0392b, #e74c3c); color: #fff; }
+.btn-blue { background: linear-gradient(135deg, #1a6faf, var(--blue)); color: #fff; }
+.btn-sm { padding: 7px 16px; font-size: 13px; }
+.btn-full { width: 100%; }
+
+/* ── LOBBY BROWSER ─────────────────────────────────────────────── */
+#screen-lobby { z-index: 1; gap: 24px; }
+.lobby-header { text-align: center; }
+.lobby-header h2 { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: 3px; }
+.lobby-header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+.lobby-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 480px; display: flex; flex-direction: column; gap: 16px; }
+.room-list { display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
+.room-list:empty::after { content: 'No hay salas disponibles'; color: var(--muted); font-size: 13px; text-align: center; padding: 24px; display: block; }
+.room-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color .2s; }
+.room-item:hover { border-color: var(--blue); }
+.room-name { font-weight: 700; font-size: 15px; }
+.room-info { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.room-badge { font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+.badge-lobby { background: rgba(58,159,255,0.15); color: var(--blue); }
+.badge-playing { background: rgba(255,58,58,0.15); color: var(--red); }
+
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; letter-spacing: 2px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.join-row { display: flex; gap: 8px; }
+.join-row .inp { flex: 1; text-transform: uppercase; letter-spacing: 3px; }
+
+/* ── TEAM SELECT ───────────────────────────────────────────────── */
+#screen-team { z-index: 1; gap: 20px; width: 100%; max-width: 900px; padding: 20px; }
+.team-header { text-align: center; }
+.team-header .room-code { font-family: 'Rajdhani', sans-serif; font-size: 13px; letter-spacing: 4px; color: var(--muted); }
+.team-header h2 { font-family: 'Rajdhani', sans-serif; font-size: 28px; font-weight: 700; letter-spacing: 3px; }
+
+.teams-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; width: 100%; }
+.team-column { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; min-height: 260px; }
+.team-column.red-col { border-top: 3px solid var(--red); }
+.team-column.blue-col { border-top: 3px solid var(--blue); }
+.team-title { font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; }
+.red-col .team-title { color: var(--red); }
+.blue-col .team-title { color: var(--blue); }
+.team-name-inp { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: 13px; width: 100%; outline: none; }
+.team-name-inp:focus { border-color: var(--blue); }
+
+.player-card { background: var(--surface2); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.player-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; font-weight: 700; color: #fff; overflow: hidden; }
+.player-circle img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.player-info { flex: 1; min-width: 0; }
+.player-pname { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-title { font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+.player-banner { width: 100%; height: 4px; border-radius: 2px; margin-top: 4px; }
+.host-badge { font-size: 10px; color: var(--gold); letter-spacing: 1px; }
+
+.team-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 8px; }
+.vs-text { font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 700; color: var(--muted); }
+
+.team-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+
+.host-controls { display: flex; gap: 10px; justify-content: center; }
+
+/* ── GAME CANVAS ───────────────────────────────────────────────── */
+#screen-game { z-index: 1; padding: 0; }
+#gameCanvas { display: block; }
+#hud { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+.score-bar { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); background: rgba(6,6,14,0.85); border: 1px solid var(--border); border-radius: 12px; padding: 8px 28px; display: flex; align-items: center; gap: 20px; backdrop-filter: blur(10px); }
+.score-num { font-family: 'Rajdhani', sans-serif; font-size: 32px; font-weight: 700; line-height: 1; }
+.score-red { color: var(--red); }
+.score-blue { color: var(--blue); }
+.score-dash { color: var(--muted); font-family: 'Rajdhani', sans-serif; font-size: 22px; }
+
+.boost-bar-wrap { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; }
+.boost-label { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; }
+.boost-bar-outer { width: 160px; height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; }
+.boost-bar-inner { height: 100%; background: linear-gradient(90deg, #ff9900, #ffd700); border-radius: 5px; transition: width .05s; }
+
+.goal-banner { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; opacity: 0; transition: opacity .3s; }
+.goal-banner.show { opacity: 1; }
+.goal-text { font-family: 'Rajdhani', sans-serif; font-size: 64px; font-weight: 700; letter-spacing: 6px; text-transform: uppercase; filter: drop-shadow(0 0 20px currentColor); }
+.goal-sub { font-size: 16px; letter-spacing: 4px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+
+.cam-btn { position: absolute; bottom: 20px; right: 20px; background: rgba(14,14,30,0.8); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 12px; letter-spacing: 2px; pointer-events: all; cursor: pointer; color: var(--text); font-family: inherit; text-transform: uppercase; transition: border-color .2s; }
+.cam-btn:hover { border-color: var(--blue); }
+
+.ping-disp { position: absolute; top: 70px; right: 16px; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+
+/* ── END SCREEN ────────────────────────────────────────────────── */
+#screen-end { z-index: 2; gap: 24px; }
+.end-title { font-family: 'Rajdhani', sans-serif; font-size: 56px; font-weight: 700; letter-spacing: 6px; text-transform: uppercase; }
+.end-score { font-family: 'Rajdhani', sans-serif; font-size: 32px; color: var(--muted); }
+.end-actions { display: flex; gap: 12px; }
+
+/* ── CONTROLS HINT ─────────────────────────────────────────────── */
+.controls-hint { position: absolute; bottom: 20px; left: 20px; font-size: 11px; color: var(--muted); pointer-events: none; line-height: 1.8; letter-spacing: .5px; }
+
+/* ── NOTIFICATION ──────────────────────────────────────────────── */
+.notif { position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-80px); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 24px; font-size: 14px; z-index: 999; transition: transform .3s cubic-bezier(.175,.885,.32,1.275); pointer-events: none; }
+.notif.show { transform: translateX(-50%) translateY(0); }
+.notif.error { border-color: var(--red); color: var(--red); }
+
+/* ── SCROLLBAR ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+
+<!-- SCREEN 1: Title + Profile -->
+<div class="screen" id="screen-title">
+  <div class="title-logo">Champions Field</div>
+  <div class="title-sub">Top-Down · Rocket · Multiplayer</div>
+
+  <div class="profile-card">
+    <h3>Tu Perfil</h3>
+    <div class="avatar-row">
+      <div class="avatar-preview" id="avatarPreview" onclick="document.getElementById('avatar-upload').click()">⚽</div>
+      <input type="file" id="avatar-upload" accept="image/*">
+      <input class="inp" id="inp-name" placeholder="Tu nombre" maxlength="20" value="Player">
+    </div>
+    <select class="inp" id="inp-title">
+      <option value="Rookie">🌱 Rookie</option>
+      <option value="Amateur">🎯 Amateur</option>
+      <option value="Expert">⚡ Expert</option>
+      <option value="Master">🏆 Master</option>
+      <option value="Champion">👑 Champion</option>
+      <option value="Legend">🔥 Legend</option>
+      <option value="Supersonic">💫 Supersonic</option>
+    </select>
+    <div>
+      <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Banner</div>
+      <div class="banner-row" id="bannerRow"></div>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="goToLobby()">Jugar →</button>
+  </div>
+</div>
+
+<!-- SCREEN 2: Lobby Browser -->
+<div class="screen hidden" id="screen-lobby">
+  <div class="lobby-header">
+    <h2>Seleccionar Sala</h2>
+    <p>Únete a una sala o crea la tuya</p>
+  </div>
+
+  <div class="lobby-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)">Salas disponibles</span>
+      <button class="btn btn-secondary btn-sm" onclick="refreshRooms()">↻ Actualizar</button>
+    </div>
+    <div class="room-list" id="roomList"></div>
+
+    <div class="divider">o</div>
+
+    <div>
+      <div style="font-size:11px;letter-spacing:3px;color:var(--muted);margin-bottom:8px">UNIRSE CON CÓDIGO</div>
+      <div class="join-row">
+        <input class="inp" id="inp-code" placeholder="ABC123" maxlength="6">
+        <button class="btn btn-secondary" onclick="joinByCode()">Unirse</button>
+      </div>
+    </div>
+
+    <div class="divider">o</div>
+
+    <div>
+      <div style="font-size:11px;letter-spacing:3px;color:var(--muted);margin-bottom:8px">CREAR SALA</div>
+      <div style="display:flex;gap:8px">
+        <input class="inp" id="inp-roomname" placeholder="Nombre de sala" style="flex:1">
+        <button class="btn btn-primary" onclick="createRoom()">Crear</button>
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-secondary btn-sm" onclick="showScreen('title')">← Atrás</button>
+</div>
+
+<!-- SCREEN 3: Team Select -->
+<div class="screen hidden" id="screen-team">
+  <div class="team-header">
+    <div class="room-code">SALA: <span id="display-roomid"></span></div>
+    <h2>Seleccionar Equipo</h2>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Comparte el código con tus amigos</div>
+  </div>
+
+  <div class="teams-grid">
+    <!-- RED -->
+    <div class="team-column red-col">
+      <div class="team-title">Equipo Rojo</div>
+      <input class="team-name-inp" id="red-team-name" placeholder="Red Team" maxlength="16">
+      <div id="red-players" style="display:flex;flex-direction:column;gap:8px;flex:1"></div>
+    </div>
+
+    <!-- CENTER -->
+    <div class="team-center">
+      <div class="vs-text">VS</div>
+      <div style="display:flex;flex-direction:column;gap:8px;width:110px">
+        <button class="btn btn-red btn-sm" onclick="changeTeam('red')">→ Rojo</button>
+        <button class="btn btn-secondary btn-sm" onclick="changeTeam('spectator')">👁 Spec</button>
+        <button class="btn btn-blue btn-sm" onclick="changeTeam('blue')">Azul ←</button>
+      </div>
+    </div>
+
+    <!-- BLUE -->
+    <div class="team-column blue-col">
+      <div class="team-title">Equipo Azul</div>
+      <input class="team-name-inp" id="blue-team-name" placeholder="Blue Team" maxlength="16">
+      <div id="blue-players" style="display:flex;flex-direction:column;gap:8px;flex:1"></div>
+    </div>
+  </div>
+
+  <div class="host-controls" id="hostControls" style="display:none">
+    <button class="btn btn-primary" onclick="startGame()">▶ Iniciar Partida</button>
+  </div>
+  <div id="waiting-msg" style="font-size:13px;color:var(--muted);letter-spacing:2px">Esperando al host...</div>
+</div>
+
+<!-- SCREEN 4: Game -->
+<div class="screen hidden" id="screen-game">
+  <canvas id="gameCanvas"></canvas>
+  <div id="hud">
+    <div class="score-bar">
+      <span class="score-num score-red" id="score-red">0</span>
+      <span class="score-dash">—</span>
+      <span class="score-num score-blue" id="score-blue">0</span>
+    </div>
+    <div class="boost-bar-wrap">
+      <span class="boost-label">Boost</span>
+      <div class="boost-bar-outer"><div class="boost-bar-inner" id="boostBar" style="width:100%"></div></div>
+    </div>
+    <div class="goal-banner" id="goalBanner">
+      <div class="goal-text" id="goalText">¡GOL!</div>
+      <div class="goal-sub" id="goalSub">Team Rojo</div>
+    </div>
+    <button class="cam-btn" onclick="toggleCamera()">📷 Cámara: <span id="camMode">Yo</span></button>
+    <div class="ping-disp">Ping: <span id="pingDisp">—</span>ms</div>
+    <div class="controls-hint">WASD / ↑↓←→ Mover &nbsp;|&nbsp; Shift Boost &nbsp;|&nbsp; Espacio Dodge &nbsp;|&nbsp; C Cámara</div>
+  </div>
+</div>
+
+<!-- SCREEN 5: End -->
+<div class="screen hidden" id="screen-end">
+  <div class="end-title" id="endTitle">Game Over</div>
+  <div class="end-score" id="endScore">0 — 0</div>
+  <div class="end-actions">
+    <button class="btn btn-secondary" id="btnRematch" onclick="rematch()" style="display:none">↩ Revancha</button>
+    <button class="btn btn-primary" onclick="backToLobby()">← Volver al lobby</button>
+  </div>
+</div>
+
+<!-- Notification -->
+<div class="notif" id="notif"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STARFIELD
+// ═══════════════════════════════════════════════════════
+(function() {
+  const c = document.getElementById('starfield');
+  const ctx = c.getContext('2d');
+  let stars = [];
+  function resize() { c.width = innerWidth; c.height = innerHeight; }
+  function init() {
+    stars = [];
+    for (let i = 0; i < 180; i++) stars.push({ x: Math.random()*innerWidth, y: Math.random()*innerHeight, r: Math.random()*1.2+.2, a: Math.random(), s: (Math.random()-.5)*.3 });
+  }
+  function draw() {
+    ctx.clearRect(0,0,c.width,c.height);
+    stars.forEach(s => { s.a += s.s * .01; if (s.a<0||s.a>1) s.s=-s.s; ctx.globalAlpha=s.a*.6; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); });
+    ctx.globalAlpha=1;
+    requestAnimationFrame(draw);
+  }
+  resize(); init(); draw();
+  window.addEventListener('resize', ()=>{ resize(); init(); });
+})();
+
+// ═══════════════════════════════════════════════════════
+//  BANNER SWATCHES
+// ═══════════════════════════════════════════════════════
+const BANNERS = ['#1a1a2e','#16213e','#0f3460','#1b4332','#3b0764','#4a0e0e','#1a1a00','#1c1c1c'];
+const bannerRow = document.getElementById('bannerRow');
+let selectedBanner = BANNERS[0];
+BANNERS.forEach(c => {
+  const sw = document.createElement('div');
+  sw.className = 'banner-swatch' + (c === selectedBanner ? ' active' : '');
+  sw.style.background = c;
+  sw.onclick = () => { selectedBanner = c; document.querySelectorAll('.banner-swatch').forEach(s=>s.classList.remove('active')); sw.classList.add('active'); };
+  bannerRow.appendChild(sw);
+});
+
+// Avatar upload
+let avatarDataUrl = null;
+document.getElementById('avatar-upload').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    avatarDataUrl = ev.target.result;
+    const prev = document.getElementById('avatarPreview');
+    prev.innerHTML = `<img src="${avatarDataUrl}">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+// ═══════════════════════════════════════════════════════
+//  NOTIFICATION
+// ═══════════════════════════════════════════════════════
+function notify(msg, isError=false) {
+  const n = document.getElementById('notif');
+  n.textContent = msg;
+  n.className = 'notif show' + (isError ? ' error' : '');
+  clearTimeout(n._t);
+  n._t = setTimeout(() => n.classList.remove('show'), 3000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCREEN MANAGER
+// ═══════════════════════════════════════════════════════
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.getElementById('screen-'+name).classList.remove('hidden');
+}
+
+// ═══════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════
+const socket = io({ transports: ['websocket'] });
+let myId = null, myRoomId = null, isHost = false;
+let gameConstants = null;
+let pingStart = 0, currentPing = 0;
+setInterval(() => { pingStart = Date.now(); socket.emit('ping_check'); }, 2000);
+socket.on('pong_check', () => { currentPing = Date.now() - pingStart; document.getElementById('pingDisp').textContent = currentPing; });
+
+socket.on('error', msg => notify(msg, true));
+
+socket.on('roomList', rooms => {
+  const list = document.getElementById('roomList');
+  list.innerHTML = '';
+  rooms.forEach(r => {
+    const item = document.createElement('div');
+    item.className = 'room-item';
+    item.innerHTML = `
+      <div>
+        <div class="room-name">${esc(r.name)}</div>
+        <div class="room-info">${r.playerCount}/${8} jugadores · 🔴 ${r.redCount} vs 🔵 ${r.blueCount}</div>
+      </div>
+      <div class="room-badge ${r.state==='lobby'?'badge-lobby':'badge-playing'}">${r.state==='lobby'?'LOBBY':'EN JUEGO'}</div>
+    `;
+    if (r.state === 'lobby') item.onclick = () => joinRoom(r.id);
+    list.appendChild(item);
+  });
+});
+
+socket.on('roomJoined', data => {
+  myId = data.playerId;
+  myRoomId = data.roomId;
+  isHost = data.isHost;
+  gameConstants = data.constants;
+  document.getElementById('display-roomid').textContent = data.roomId;
+  showScreen('team');
+  renderLobby(data.room);
+});
+
+socket.on('lobbyUpdate', room => renderLobby(room));
+
+socket.on('gameStarted', data => {
+  gameConstants = { ...gameConstants, ...data };
+  initGame();
+  showScreen('game');
+});
+
+socket.on('gameState', state => {
+  if (currentScreen() !== 'game') return;
+  handleServerState(state);
+});
+
+socket.on('goal', data => showGoalBanner(data));
+socket.on('gameOver', data => showEndScreen(data));
+socket.on('returnToLobby', data => { notify(data.reason); showScreen('team'); });
+
+// ═══════════════════════════════════════════════════════
+//  PROFILE HELPERS
+// ═══════════════════════════════════════════════════════
+function getProfile() {
+  return {
+    name: document.getElementById('inp-name').value.trim() || 'Player',
+    title: document.getElementById('inp-title').value,
+    banner: selectedBanner,
+    avatar: avatarDataUrl,
+  };
+}
+
+function esc(s) { return String(s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
+// ═══════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════
+function goToLobby() { showScreen('lobby'); refreshRooms(); }
+function refreshRooms() { socket.emit('getRooms'); }
+function createRoom() {
+  const name = document.getElementById('inp-roomname').value.trim() || 'Champions Field';
+  socket.emit('createRoom', { roomName: name, profile: getProfile() });
+}
+function joinRoom(id) { socket.emit('joinRoom', { roomId: id, profile: getProfile() }); }
+function joinByCode() {
+  const code = document.getElementById('inp-code').value.trim().toUpperCase();
+  if (!code) { notify('Ingresa un código', true); return; }
+  joinRoom(code);
+}
+function changeTeam(team) { socket.emit('changeTeam', { team }); }
+function startGame() { socket.emit('startGame'); }
+function rematch() { socket.emit('rematch'); showScreen('team'); }
+function backToLobby() { showScreen('team'); }
+
+function currentScreen() {
+  const screens = ['title','lobby','team','game','end'];
+  for (const s of screens) if (!document.getElementById('screen-'+s).classList.contains('hidden')) return s;
+}
+
+// ═══════════════════════════════════════════════════════
+//  LOBBY RENDER
+// ═══════════════════════════════════════════════════════
+function renderLobby(room) {
+  const redDiv = document.getElementById('red-players');
+  const blueDiv = document.getElementById('blue-players');
+  redDiv.innerHTML = ''; blueDiv.innerHTML = '';
+
+  Object.values(room.players).forEach(p => {
+    if (p.team !== 'red' && p.team !== 'blue') return;
+    const color = p.team === 'red' ? '#e74c3c' : '#3a9fff';
+    const card = document.createElement('div');
+    card.className = 'player-card';
+    const avatarInner = p.avatar ? `<img src="${p.avatar}">` : p.name[0].toUpperCase();
+    card.innerHTML = `
+      <div class="player-circle" style="background:${color}">${avatarInner}</div>
+      <div class="player-info">
+        <div class="player-pname">${esc(p.name)}${p.id===room.hostId?'<span class="host-badge" style="margin-left:6px">HOST</span>':''}</div>
+        <div class="player-title">${esc(p.title)}</div>
+        <div class="player-banner" style="background:${p.banner}"></div>
+      </div>
+    `;
+    (p.team === 'red' ? redDiv : blueDiv).appendChild(card);
+  });
+
+  const hc = document.getElementById('hostControls');
+  const wm = document.getElementById('waiting-msg');
+  if (room.hostId === myId) { hc.style.display = 'flex'; wm.style.display = 'none'; }
+  else { hc.style.display = 'none'; wm.style.display = ''; }
+}
+
+// ═══════════════════════════════════════════════════════
+//  GAME ENGINE
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let G = {}; // game constants
+let localState = {};   // local predicted state
+let serverState = {};  // last server state
+let gameRunning = false;
+let camMode = 'self';  // 'self' | 'ball'
+let camX = 0, camY = 0;
+let inputSeq = 0;
+let inputHistory = [];
+let particles = [];
+let goalFlash = 0;
+
+// Preload images for avatars
+const avatarCache = {};
+
+function initGame() {
+  G = gameConstants;
+  localState = {};
+  serverState = {};
+  particles = [];
+  gameRunning = true;
+  resizeCanvas();
+  requestAnimationFrame(gameLoop);
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', () => { if (gameRunning) resizeCanvas(); });
+
+// ── INPUT ──────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (!gameRunning) return;
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if (k === ' ' || k === 'x') { e.preventDefault(); triggerDodge(); }
+  if (k === 'c') { e.preventDefault(); toggleCamera(); }
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+function getInputKeys() {
+  return {
+    up:    !!(keys['w'] || keys['arrowup']),
+    down:  !!(keys['s'] || keys['arrowdown']),
+    left:  !!(keys['a'] || keys['arrowleft']),
+    right: !!(keys['d'] || keys['arrowright']),
+    boost: !!(keys['shift'] || keys['e']),
+  };
+}
+
+let dodgePending = null;
+function triggerDodge() {
+  const ik = getInputKeys();
+  let dx = 0, dy = 0;
+  if (ik.up) dy -= 1; if (ik.down) dy += 1;
+  if (ik.left) dx -= 1; if (ik.right) dx += 1;
+  if (dx === 0 && dy === 0) dx = 1;
+  dodgePending = { x: dx, y: dy };
+  // Spawn dodge particles immediately (client-side visual)
+  const me = localState[myId];
+  if (me) spawnDodgeParticles(me.x, me.y, dx, dy);
+}
+
+let lastInputSend = 0;
+function sendInput() {
+  const now = performance.now();
+  if (now - lastInputSend < 14) return; // ~72/s max
+  lastInputSend = now;
+  const ik = getInputKeys();
+  inputSeq++;
+  const inp = { keys: ik, seq: inputSeq, dodge: dodgePending };
+  dodgePending = null;
+  socket.emit('input', inp);
+  inputHistory.push({ seq: inputSeq, keys: ik, t: now });
+  if (inputHistory.length > 120) inputHistory.shift();
+}
+
+// ── CLIENT-SIDE PREDICTION ────────────────────────────
+const PLAYER_SPEED_C = 420, BOOST_SPEED_C = 780, FRICTION_C = 0.985;
+const DODGE_SPEED_C = 700, DODGE_DUR_C = 0.18;
+const BOOST_DRAIN_C = 40, BOOST_REGEN_C = 10, BOOST_MAX_C = 100;
+
+let localDodge = { active: false, timer: 0, vx: 0, vy: 0 };
+
+function predictSelf(dt) {
+  const me = localState[myId];
+  if (!me) return;
+  const ik = getInputKeys();
+  const speed = (ik.boost && me.boost > 0) ? BOOST_SPEED_C : PLAYER_SPEED_C;
+
+  if (localDodge.active) {
+    localDodge.timer -= dt;
+    me.vx = localDodge.vx;
+    me.vy = localDodge.vy;
+    if (localDodge.timer <= 0) localDodge.active = false;
+  } else {
+    let ax = 0, ay = 0;
+    if (ik.up) ay -= 1; if (ik.down) ay += 1;
+    if (ik.left) ax -= 1; if (ik.right) ax += 1;
+    const len = Math.sqrt(ax*ax+ay*ay);
+    if (len > 0) { ax/=len; ay/=len; }
+    const tx = ax * speed, ty = ay * speed;
+    me.vx += (tx - me.vx) * Math.min(1, 12 * dt);
+    me.vy += (ty - me.vy) * Math.min(1, 12 * dt);
+    if (ik.boost && me.boost > 0 && len > 0) me.boost = Math.max(0, me.boost - BOOST_DRAIN_C * dt);
+    else me.boost = Math.min(BOOST_MAX_C, me.boost + BOOST_REGEN_C * dt);
+  }
+  me.vx *= Math.pow(FRICTION_C, dt*60);
+  me.vy *= Math.pow(FRICTION_C, dt*60);
+  me.x += me.vx * dt;
+  me.y += me.vy * dt;
+  me.x = Math.max(G.playerRadius||22, Math.min((G.MAP_W||2400)-(G.playerRadius||22), me.x));
+  me.y = Math.max(G.playerRadius||22, Math.min((G.MAP_H||1400)-(G.playerRadius||22), me.y));
+}
+
+function handleServerState(state) {
+  // Reconcile: trust server for all other players, blend for self
+  Object.keys(state.players).forEach(id => {
+    const sp = state.players[id];
+    if (id === myId) {
+      // Only correct if significant error
+      if (!localState[id]) { localState[id] = { ...sp }; return; }
+      const me = localState[id];
+      const dx = sp.x - me.x, dy = sp.y - me.y;
+      const dist = Math.sqrt(dx*dx+dy*dy);
+      if (dist > 80) {
+        // Hard snap
+        me.x = sp.x; me.y = sp.y; me.vx = sp.vx; me.vy = sp.vy;
+      } else if (dist > 5) {
+        // Smooth correction
+        me.x += dx * 0.15; me.y += dy * 0.15;
+        me.vx = sp.vx; me.vy = sp.vy;
+      }
+      me.boost = sp.boost;
+      me.isDodging = sp.isDodging;
+    } else {
+      if (!localState[id]) localState[id] = { ...sp };
+      else {
+        const lp = localState[id];
+        lp.x += (sp.x - lp.x) * 0.3;
+        lp.y += (sp.y - lp.y) * 0.3;
+        lp.vx = sp.vx; lp.vy = sp.vy;
+        lp.boost = sp.boost; lp.team = sp.team;
+        lp.name = sp.name; lp.avatar = sp.avatar; lp.title = sp.title; lp.banner = sp.banner;
+      }
+    }
+  });
+  // Remove disconnected
+  Object.keys(localState).forEach(id => { if (!state.players[id]) delete localState[id]; });
+
+  // Ball — interpolate
+  if (!serverState.ball) serverState.ball = { ...state.ball };
+  else {
+    const b = serverState.ball, sb = state.ball;
+    b.x += (sb.x - b.x) * 0.35;
+    b.y += (sb.y - b.y) * 0.35;
+    b.vx = sb.vx; b.vy = sb.vy;
+  }
+
+  serverState.boostPads = state.boostPads;
+  serverState.scores = state.scores;
+  serverState.goalCooldown = state.goalCooldown;
+
+  // Update HUD
+  if (state.scores) {
+    document.getElementById('score-red').textContent = state.scores.red;
+    document.getElementById('score-blue').textContent = state.scores.blue;
+  }
+  const me = localState[myId];
+  if (me) document.getElementById('boostBar').style.width = me.boost + '%';
+}
+
+// ── PARTICLES ─────────────────────────────────────────
+function spawnDodgeParticles(x, y, dx, dy) {
+  for (let i = 0; i < 18; i++) {
+    const a = Math.atan2(dy, dx) + (Math.random()-.5)*1.2;
+    const sp = 150 + Math.random()*200;
+    particles.push({
+      x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+      r: 3 + Math.random()*4, life: 1, maxLife: 0.5 + Math.random()*0.3,
+      color: `hsl(${270 + Math.random()*40},100%,70%)`,
+    });
+  }
+}
+
+function spawnBoostParticles(x, y, vx, vy) {
+  if (Math.random() > 0.4) return;
+  const a = Math.atan2(vy, vx) + Math.PI + (Math.random()-.5)*.5;
+  particles.push({
+    x, y, vx: Math.cos(a)*(60+Math.random()*80), vy: Math.sin(a)*(60+Math.random()*80),
+    r: 2 + Math.random()*3, life: 1, maxLife: 0.25 + Math.random()*0.2,
+    color: `hsl(${30 + Math.random()*30},100%,65%)`,
+  });
+}
+
+function spawnGoalParticles(teamColor) {
+  const hue = teamColor === 'red' ? 0 : 210;
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 100 + Math.random() * 300;
+    particles.push({
+      x: G.MAP_W/2, y: G.MAP_H/2,
+      vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+      r: 4 + Math.random()*6, life: 1, maxLife: 1.2 + Math.random()*0.8,
+      color: `hsl(${hue + Math.random()*30},100%,65%)`,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.9; p.vy *= 0.9;
+    p.life -= dt / p.maxLife;
+  });
+}
+
+// ── CAMERA ────────────────────────────────────────────
+function toggleCamera() {
+  camMode = camMode === 'self' ? 'ball' : 'self';
+  document.getElementById('camMode').textContent = camMode === 'self' ? 'Yo' : 'Balón';
+}
+
+function updateCamera() {
+  const W = canvas.width, H = canvas.height;
+  const mapW = G.MAP_W || 2400, mapH = G.MAP_H || 1400;
+  let tx = mapW/2, ty = mapH/2;
+  if (camMode === 'self' && localState[myId]) { tx = localState[myId].x; ty = localState[myId].y; }
+  else if (camMode === 'ball' && serverState.ball) { tx = serverState.ball.x; ty = serverState.ball.y; }
+  camX += (tx - W/2 - camX) * 0.12;
+  camY += (ty - H/2 - camY) * 0.12;
+  // Clamp
+  camX = Math.max(0, Math.min(mapW - W, camX));
+  camY = Math.max(0, Math.min(mapH - H, camY));
+}
+
+// ── RENDER ────────────────────────────────────────────
+let lastFrame = 0;
+function gameLoop(ts) {
+  if (!gameRunning) return;
+  const dt = Math.min((ts - lastFrame) / 1000, 0.05);
+  lastFrame = ts;
+  sendInput();
+  predictSelf(dt);
+  updateParticles(dt);
+  updateCamera();
+  render(dt);
+  requestAnimationFrame(gameLoop);
+}
+
+function render(dt) {
+  const W = canvas.width, H = canvas.height;
+  const mapW = G.MAP_W || 2400, mapH = G.MAP_H || 1400;
+  const gw = G.goalWidth || 180, gd = G.goalDepth || 50;
+  const pr = G.playerRadius || 22, br = G.ballRadius || 18;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(-camX, -camY);
+
+  // ── FIELD ──
+  // Ground
+  const grad = ctx.createRadialGradient(mapW/2, mapH/2, 0, mapW/2, mapH/2, mapW*0.7);
+  grad.addColorStop(0, '#0a1a0f');
+  grad.addColorStop(1, '#060e0a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, mapW, mapH);
+
+  // Field lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 2;
+  // Outer border
+  ctx.strokeRect(4, 4, mapW-8, mapH-8);
+  // Center line
+  ctx.beginPath(); ctx.moveTo(mapW/2, 0); ctx.lineTo(mapW/2, mapH); ctx.stroke();
+  // Center circle
+  ctx.beginPath(); ctx.arc(mapW/2, mapH/2, 120, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(mapW/2, mapH/2, 4, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fill();
+  // Penalty arcs
+  ctx.beginPath(); ctx.arc(0, mapH/2, 200, -Math.PI*0.4, Math.PI*0.4); ctx.stroke();
+  ctx.beginPath(); ctx.arc(mapW, mapH/2, 200, Math.PI*0.6, Math.PI*1.4); ctx.stroke();
+
+  // Grass stripes
+  for (let i = 0; i < 10; i++) {
+    const x = i * mapW/10;
+    ctx.fillStyle = i%2===0 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.02)';
+    ctx.fillRect(x, 0, mapW/10, mapH);
+  }
+
+  // ── GOALS ──
+  const goalY1 = mapH/2 - gw/2;
+  ctx.fillStyle = 'rgba(255,58,58,0.08)';
+  ctx.fillRect(-gd, goalY1, gd, gw);
+  ctx.strokeStyle = 'rgba(255,58,58,0.5)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(-gd, goalY1, gd, gw);
+
+  ctx.fillStyle = 'rgba(58,159,255,0.08)';
+  ctx.fillRect(mapW, goalY1, gd, gw);
+  ctx.strokeStyle = 'rgba(58,159,255,0.5)';
+  ctx.strokeRect(mapW, goalY1, gd, gw);
+
+  // Goal posts
+  ctx.fillStyle = '#fff';
+  [[0, goalY1], [0, goalY1+gw], [mapW, goalY1], [mapW, goalY1+gw]].forEach(([x,y]) => {
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2); ctx.fill();
+  });
+
+  // ── BOOST PADS ──
+  if (serverState.boostPads && G.boostPads) {
+    G.boostPads.forEach(pad => {
+      const padState = serverState.boostPads.find(p => p.id === pad.id);
+      const active = padState ? padState.active : true;
+      const r = pad.big ? 28 : 18;
+      ctx.save();
+      ctx.globalAlpha = active ? 1 : 0.25;
+      const pg = ctx.createRadialGradient(pad.x, pad.y, 0, pad.x, pad.y, r);
+      pg.addColorStop(0, pad.big ? 'rgba(255,215,0,0.9)' : 'rgba(255,150,0,0.7)');
+      pg.addColorStop(1, 'rgba(255,100,0,0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath(); ctx.arc(pad.x, pad.y, r, 0, Math.PI*2); ctx.fill();
+      if (active) {
+        ctx.strokeStyle = pad.big ? '#ffd700' : '#ff9900';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(pad.x, pad.y, r, 0, Math.PI*2); ctx.stroke();
+        // Pulse ring
+        ctx.globalAlpha = 0.3 + 0.2*Math.sin(Date.now()/300);
+        ctx.beginPath(); ctx.arc(pad.x, pad.y, r*1.4, 0, Math.PI*2); ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  // ── PARTICLES ──
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+
+  // ── PLAYERS ──
+  Object.values(localState).forEach(p => {
+    if (p.team !== 'red' && p.team !== 'blue') return;
+    const col = p.team === 'red' ? '#e74c3c' : '#3a9fff';
+    const isMe = p.id === myId;
+
+    // Boost trail particles
+    if (p.id === myId && getInputKeys().boost && p.boost > 0) {
+      spawnBoostParticles(p.x, p.y, p.vx, p.vy);
+    }
+
+    ctx.save();
+    // Glow
+    ctx.shadowBlur = isMe ? 20 : 12;
+    ctx.shadowColor = col;
+
+    // Shadow under player
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(p.x+3, p.y+5, pr*0.8, pr*0.4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Banner ring
+    ctx.strokeStyle = p.banner || '#222';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, pr+3, 0, Math.PI*2); ctx.stroke();
+
+    // Body
+    const bodyGrad = ctx.createRadialGradient(p.x-4, p.y-4, 2, p.x, p.y, pr);
+    bodyGrad.addColorStop(0, lightenColor(col, 40));
+    bodyGrad.addColorStop(1, col);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath(); ctx.arc(p.x, p.y, pr, 0, Math.PI*2); ctx.fill();
+
+    // Avatar or initial
+    if (p.avatar) {
+      if (!avatarCache[p.id]) {
+        const img = new Image();
+        img.src = p.avatar;
+        avatarCache[p.id] = img;
+      }
+      ctx.save();
+      ctx.beginPath(); ctx.arc(p.x, p.y, pr-4, 0, Math.PI*2); ctx.clip();
+      try { ctx.drawImage(avatarCache[p.id], p.x-pr+4, p.y-pr+4, (pr-4)*2, (pr-4)*2); } catch(e){}
+      ctx.restore();
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = `bold ${pr}px Exo 2, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowBlur = 0;
+      ctx.fillText(p.name[0].toUpperCase(), p.x, p.y+1);
+    }
+
+    // "Me" indicator
+    if (isMe) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.arc(p.x, p.y, pr+8, 0, Math.PI*2); ctx.stroke();
+    }
+
+    // Name tag
+    ctx.globalAlpha = 0.85;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold 11px Exo 2, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.name, p.x, p.y - pr - 10);
+
+    // Boost bar under player
+    const bw = 40;
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(p.x - bw/2, p.y + pr + 6, bw, 4);
+    ctx.fillStyle = p.boost > 30 ? '#ffd700' : '#ff4444';
+    ctx.fillRect(p.x - bw/2, p.y + pr + 6, bw * (p.boost/100), 4);
+
+    ctx.restore();
+  });
+
+  // ── BALL ──
+  const ball = serverState.ball;
+  if (ball) {
+    ctx.save();
+    ctx.shadowBlur = 25; ctx.shadowColor = '#ffffff99';
+    const bg = ctx.createRadialGradient(ball.x-br*0.3, ball.y-br*0.3, 1, ball.x, ball.y, br);
+    bg.addColorStop(0, '#ffffff');
+    bg.addColorStop(0.4, '#dddddd');
+    bg.addColorStop(1, '#888888');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, br, 0, Math.PI*2); ctx.fill();
+
+    // Hex pattern on ball
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    for (let a = 0; a < 6; a++) {
+      const ang = a * Math.PI/3;
+      ctx.beginPath();
+      ctx.moveTo(ball.x, ball.y);
+      ctx.lineTo(ball.x + Math.cos(ang)*br, ball.y + Math.sin(ang)*br);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function lightenColor(hex, amt) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.min(255,r+amt)},${Math.min(255,g+amt)},${Math.min(255,b+amt)})`;
+}
+
+// ── GOAL BANNER ───────────────────────────────────────
+socket.on('goal', data => {
+  const banner = document.getElementById('goalBanner');
+  const gt = document.getElementById('goalText');
+  const gs = document.getElementById('goalSub');
+  gt.textContent = '⚽ ¡GOL!';
+  gt.style.color = data.team === 'red' ? '#ff3a3a' : '#3a9fff';
+  gs.textContent = `Equipo ${data.team === 'red' ? 'Rojo' : 'Azul'}`;
+  banner.classList.add('show');
+  spawnGoalParticles(data.team);
+  setTimeout(() => banner.classList.remove('show'), 2800);
+});
+
+// ── END SCREEN ────────────────────────────────────────
+function showEndScreen(data) {
+  gameRunning = false;
+  const title = document.getElementById('endTitle');
+  const score = document.getElementById('endScore');
+  title.textContent = data.winner === 'red' ? '🔴 ¡Equipo Rojo Gana!' : '🔵 ¡Equipo Azul Gana!';
+  title.style.color = data.winner === 'red' ? '#ff3a3a' : '#3a9fff';
+  score.textContent = `${data.scores.red} — ${data.scores.blue}`;
+  document.getElementById('btnRematch').style.display = isHost ? '' : 'none';
+  showScreen('end');
+}
+
+// Ping
+socket.on('connect', () => {
+  socket.on('pong_check', () => { currentPing = Date.now() - pingStart; document.getElementById('pingDisp').textContent = currentPing; });
+});
+// override with standard ping
+setInterval(() => {
+  pingStart = Date.now();
+  socket.emit('ping', null, () => { currentPing = Date.now() - pingStart; const d = document.getElementById('pingDisp'); if(d) d.textContent = currentPing; });
+}, 2000);
+</script>
+</body>
+</html>
